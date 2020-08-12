@@ -14,6 +14,7 @@ export default class ethSupply {
     const lastBlockNumber = await _this.web3.eth.getBlockNumber();
     console.log('lastBlockNumber: ' + lastBlockNumber);    
     let allMinerDiffs = 0;
+    let allMinerUncleDiffs = 0;
     let invalidMinerAddress = 0;
     let burnedSupply = 0;
 
@@ -66,16 +67,22 @@ export default class ethSupply {
               if(block.uncles.length>0) {
                 const unclePromises=[];
                 let blockUncleRewards=0;
+                let uncleBalancesDelta=0;
                 for(let index=0;index<block.uncles.length;index++) {
                   unclePromises.push(
                     new Promise((uncleResolve,uncleReject)=>
                     _this.web3.eth.getUncle(blockNumber,index).then(uncleBlock => {
                       blockUncleRewards += baseReward * (uncleBlock.number + 8 - blockNumber) / 8;
+                      let balance_uncle_i = await _this.web3.eth.getBalance(uncleBlock.miner, block.number);
+                      let balance_uncle_i_1 = await _this.web3.eth.getBalance(uncleBlock.miner, block.number+1);
+                      let balance_uncle_delta = balance_uncle_i_1 - balance_uncle_i ;
+                      uncleBalancesDelta += balance_uncle_delta;
                       uncleResolve();
                     }))
                   );
                   Promise.all(unclePromises).then(()=>{
                     uncleRewards+=blockUncleRewards;
+                    allMinerUncleDiffs += uncleBalancesDelta;
                     resolve()
                   });
                 }
@@ -93,8 +100,12 @@ export default class ethSupply {
     console.log('\nGenesis Supply: '+genesisSupply);
     console.log('Block rewards:'+blockRewards);
     console.log('Uncle rewards:'+uncleRewards);
-    console.log('Total Supply: '+(genesisSupply+blockRewards+uncleRewards)+ ' at block:'+lastBlockNumber);
+    console.log('Total Supply: '+ (genesisSupply+blockRewards+uncleRewards) + ' at block:'+lastBlockNumber);
     console.log('All miner diffs: ' + allMinerDiffs);
-    console.log('Invalid miner addresses: ' + invalidMinerAddress);
+    console.log('All uncle miner diffs: ' + allMinerUncleDiffs);
+    console.log('All miner + uncle miner diffs (should be close to total supply - burnt supply): ' + allMinerDiffs + allMinerUncleDiffs);
+    console.log('Burned miner addresses: ' + invalidMinerAddress);
+    console.log('Burned supply: ' + burnedSupply);
+    console.log('Total Supply - burnedSupply: ' + (genesisSupply+blockRewards+uncleRewards) - burnedSupply);
   }
 }
