@@ -1,4 +1,7 @@
 let _this;
+
+const BigNumber = require('bignumber.js');
+
 export default class ethSupply {
   constructor(web3) {
     this.web3 = web3;
@@ -37,7 +40,7 @@ export default class ethSupply {
               blockRewards += totalReward;
 
               if(block.miner == '0x0000000000000000000000000000000000000000') {     
-                console.log('block ' + blockNumber + ': burn address');
+                //console.log('block ' + blockNumber + ': burn address');
                 invalidMinerAddress++;
                 burnedSupply += totalReward;
               } else if(blockNumber == 0) {
@@ -48,16 +51,21 @@ export default class ethSupply {
                     console.log('balance_i (miner: ' + block.miner + ', i: ' + blockNumber + '):' + err);
                   }
                   if (res) {
-                    const bal_i = res;
-                    this.web3.eth.getBalance('0x' + block.miner, blockNumber, function(err, res) {
+                    const bal_before = res;
+                    console.log('i: ' + blockNumber + ', miner: ' + block.miner + ', bal_before: ' 
+                                    + _this.web3.utils.fromWei(bal_before));
+                    _this.web3.eth.getBalance(block.miner, blockNumber, function(err, res) {
                         if (err) {
-                            console.log('balance_i_1: ' + err);
+                            console.log('bal_after: ' + err);
                         }
                         if (res) {
-                            const bal_i_1 = res;
-                            const miner_diff = bal_i - bal_i_1;
+                            const bal_after = res;
+                            console.log('i: ' + blockNumber + ', miner: ' + block.miner 
+                                      + ', bal_before: ' + _this.web3.utils.fromWei(bal_before)
+                                      + ', bal_after: '  + _this.web3.utils.fromWei(bal_after));
+                            const miner_diff = _this.web3.utils.fromWei(bal_after) - _this.web3.utils.fromWei(bal_before);
                             allMinerDiffs = allMinerDiffs + miner_diff;
-                            console.log("miner diff: " + miner_diff);
+                            console.log('i: ' + blockNumber + ' miner diff: ' + miner_diff);
                         }
                     });
                   }
@@ -71,27 +79,29 @@ export default class ethSupply {
                 for(let index=0;index<block.uncles.length;index++) {
                   unclePromises.push(
                     new Promise((uncleResolve,uncleReject)=>
-                    _this.web3.eth.getUncle(blockNumber,index).then(uncleBlock => {
+                      _this.web3.eth.getUncle(blockNumber,index).then(uncleBlock => {
                       blockUncleRewards += baseReward * (uncleBlock.number + 8 - blockNumber) / 8;
-                      let balance_uncle_i = await _this.web3.eth.getBalance(uncleBlock.miner, block.number);
-                      let balance_uncle_i_1 = await _this.web3.eth.getBalance(uncleBlock.miner, block.number+1);
+                      let balance_uncle_i = 0; // await _this.web3.eth.getBalance(uncleBlock.miner, block.number);
+                      let balance_uncle_i_1 = 0; // await _this.web3.eth.getBalance(uncleBlock.miner, block.number+1);
                       let balance_uncle_delta = balance_uncle_i_1 - balance_uncle_i ;
                       uncleBalancesDelta += balance_uncle_delta;
                       uncleResolve();
                     }))
                   );
-                  Promise.all(unclePromises).then(()=>{
+                }
+                Promise.all(unclePromises).then(()=>{
                     uncleRewards+=blockUncleRewards;
                     allMinerUncleDiffs += uncleBalancesDelta;
                     resolve()
-                  });
-                }
+                });
               } else {
                 resolve();
               }
 
-              if(blockNumber%batchSize===0)
+              if(blockNumber%batchSize===0) {
                 console.log('Block ' + blockNumber + " Cumulative block rewards:"+blockRewards + ' uncle rewards:'+uncleRewards);
+                console.log('Block ' + blockNumber + " minerDeltas:" + allMinerDiffs + ' uncle diffs: ' + allMinerUncleDiffs);
+              }
             })
           }));
         }
@@ -104,8 +114,8 @@ export default class ethSupply {
     console.log('All miner diffs: ' + allMinerDiffs);
     console.log('All uncle miner diffs: ' + allMinerUncleDiffs);
     console.log('All miner + uncle miner diffs (should be close to total supply - burnt supply): ' + allMinerDiffs + allMinerUncleDiffs);
-    console.log('Burned miner addresses: ' + invalidMinerAddress);
+    console.log('Burned miner blocks: ' + invalidMinerAddress);
     console.log('Burned supply: ' + burnedSupply);
-    console.log('Total Supply - burnedSupply: ' + (genesisSupply+blockRewards+uncleRewards) - burnedSupply);
+    console.log('Block rewards - burnedSupply: ' + (blockRewards-burnedSupply));
   }
 }
